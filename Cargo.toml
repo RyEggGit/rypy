@@ -1,0 +1,13 @@
+[package]
+name = "rypy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.22"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.128"
+
+[[bin]]
+name = "rypy"
+path = "./src/main.rs"

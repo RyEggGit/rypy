@@ -1,0 +1,8 @@
+
+[language-server.rypy]
+command = "./target/debug/rypy"
+
+[[language]]
+name = "python"
+language-servers = ["rypy"]
+auto-format = true
