@@ -10,18 +10,23 @@ fn main() {
         match lsp_handler.read_message() {
             Ok(message) => {
                 let decoded = rpc::decode(message);
-                let response = match decoded["method"].as_str() {
-                    Some("initialize") => lsp_handler.handle_initialize(),
-                    _ => lsp::InitializeResult {
-                        capabilities: lsp::ServerCapabilities {},
-                        server_info: None,
-                    },
+                let response = match lsp_handler.handle_response(decoded) {
+                    lsp::LspResult::Success(Some(response)) => response,
+                    lsp::LspResult::Success(None) => {
+                        // No response to send (no point in handling this case)
+                        continue;
+                    }
+                    lsp::LspResult::Error(_) => {
+                        // TODO: improve error handling. Perhaps log tracing to the client?
+                        continue;
+                    }
                 };
-                let encoded = rpc::encode(serde_json::to_value(response).unwrap());
+
+                let encoded = rpc::encode(response);
                 println!("{}", encoded);
             }
-            // todo handle error
-            Err(e) => {}
+            // TODO: improve error handling. Perhaps log tracing to the client?
+            Err(_) => {}
         }
     }
 }

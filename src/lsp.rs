@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value as Json};
 use std::io::{self, BufRead, Read};
 
 use crate::log::Logger;
@@ -9,7 +9,7 @@ pub struct InitializeParams {
     pub capabilities: ClientCapabilities,
     pub process_id: Option<u32>,
     pub root_uri: Option<String>,
-    pub initialization_options: Option<Value>,
+    pub initialization_options: Option<Json>,
     pub trace: Option<String>,
 }
 
@@ -25,14 +25,18 @@ pub struct InitializeResult {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ServerCapabilities {
-    // Define server capabilities here
-}
+pub struct ServerCapabilities {}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ServerInfo {
     pub name: String,
     pub version: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum LspResult {
+    Success(Option<Json>),
+    Error(String),
 }
 
 pub struct LspHandler<'a> {
@@ -46,6 +50,7 @@ impl<'a> LspHandler<'a> {
 
     pub fn handle_initialize(&mut self) -> InitializeResult {
         self.logger.log("Handling initialize request").unwrap();
+
         InitializeResult {
             capabilities: ServerCapabilities {
                 // Initialize server capabilities here
@@ -55,6 +60,62 @@ impl<'a> LspHandler<'a> {
                 version: Some("1.0.0".to_string()),
             }),
         }
+    }
+
+    pub fn handle_response(&mut self, message: Json) -> LspResult {
+        self.logger
+            .log(&format!("Handling response: {:?}", message))
+            .unwrap();
+
+        let response = match message["method"].as_str() {
+            Some("initialize") => {
+                let result = self.handle_initialize();
+                json!({"result": result})
+            }
+            Some("shutdown") => {
+                self.handle_shutdown();
+                json!({"result": null})
+            }
+            Some("textDocument/didOpen") => {
+                self.handle_did_open(message["params"].clone());
+                json!({"result": null})
+            }
+            Some("textDocument/didChange") => {
+                self.handle_did_change(message["params"].clone());
+                json!({"result": null})
+            }
+            Some("textDocument/didClose") => {
+                self.handle_did_close(message["params"].clone());
+                json!({"result": null})
+            }
+            _ => {
+                return LspResult::Error("Method not found".to_string());
+            }
+        };
+
+        return LspResult::Success(Some(response));
+    }
+
+    pub fn handle_shutdown(&mut self) {
+        self.logger.log("Handling shutdown request").unwrap();
+    }
+
+    pub fn handle_did_open(&mut self, params: Json) {
+        self.logger
+            .log(&format!("Handling didOpen: {:?}", params))
+            .unwrap();
+    }
+
+    pub fn handle_did_change(&mut self, params: Json) {
+        self.logger
+            .log(&format!("Handling didChange: {:?}", params))
+            .unwrap();
+    }
+
+    pub fn handle_did_close(&mut self, params: Json) {
+        self.logger
+            .log(&format!("Handling didClose: {:?}", params))
+            .unwrap();
     }
 
     pub fn read_message(&mut self) -> io::Result<String> {
