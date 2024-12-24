@@ -1,10 +1,9 @@
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as Json};
 use std::io::{self, BufRead, Read};
 
-use crate::log::Logger;
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct InitializeParams {
     pub capabilities: ClientCapabilities,
     pub process_id: Option<u32>,
@@ -13,7 +12,7 @@ pub struct InitializeParams {
     pub trace: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ClientCapabilities {
     // Define client capabilities here
 }
@@ -25,7 +24,12 @@ pub struct InitializeResult {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ServerCapabilities {}
+#[serde(rename_all = "camelCase")]
+pub struct ServerCapabilities {
+    text_document_sync: Option<u8>,
+    hover_provider: Option<bool>,
+    definition_provider: Option<bool>,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ServerInfo {
@@ -35,25 +39,25 @@ pub struct ServerInfo {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum LspResult {
-    Success(Option<Json>),
+    Success(Json),
     Error(String),
 }
 
-pub struct LspHandler<'a> {
-    logger: &'a mut Logger, // Add a logger field
-}
+pub struct LspHandler {}
 
-impl<'a> LspHandler<'a> {
-    pub fn new(logger: &mut Logger) -> LspHandler {
-        LspHandler { logger }
+impl LspHandler {
+    pub fn new() -> LspHandler {
+        return LspHandler {};
     }
 
     pub fn handle_initialize(&mut self) -> InitializeResult {
-        self.logger.log("Handling initialize request").unwrap();
+        info!("Handling initialize request");
 
         InitializeResult {
             capabilities: ServerCapabilities {
-                // Initialize server capabilities here
+                text_document_sync: Some(1),
+                hover_provider: Some(true),
+                definition_provider: Some(true),
             },
             server_info: Some(ServerInfo {
                 name: "My Language Server".to_string(),
@@ -62,30 +66,26 @@ impl<'a> LspHandler<'a> {
         }
     }
 
-    pub fn handle_response(&mut self, message: Json) -> LspResult {
-        self.logger
-            .log(&format!("Handling response: {:?}", message))
-            .unwrap();
-
-        let response = match message["method"].as_str() {
-            Some("initialize") => {
+    pub fn handle_response(&mut self, method: String, params: Json) -> LspResult {
+        let response = match method.as_str() {
+            "initialize" => {
                 let result = self.handle_initialize();
-                json!({"result": result})
+                json!(result)
             }
-            Some("shutdown") => {
+            "shutdown" => {
                 self.handle_shutdown();
                 json!({"result": null})
             }
-            Some("textDocument/didOpen") => {
-                self.handle_did_open(message["params"].clone());
+            "textDocument/didOpen" => {
+                self.handle_did_open(params);
                 json!({"result": null})
             }
-            Some("textDocument/didChange") => {
-                self.handle_did_change(message["params"].clone());
+            "textDocument/didChange" => {
+                self.handle_did_change(params);
                 json!({"result": null})
             }
-            Some("textDocument/didClose") => {
-                self.handle_did_close(message["params"].clone());
+            "textDocument/didClose" => {
+                self.handle_did_close(params);
                 json!({"result": null})
             }
             _ => {
@@ -93,29 +93,23 @@ impl<'a> LspHandler<'a> {
             }
         };
 
-        return LspResult::Success(Some(response));
+        return LspResult::Success(response);
     }
 
     pub fn handle_shutdown(&mut self) {
-        self.logger.log("Handling shutdown request").unwrap();
+        info!("Handling shutdown request");
     }
 
     pub fn handle_did_open(&mut self, params: Json) {
-        self.logger
-            .log(&format!("Handling didOpen: {:?}", params))
-            .unwrap();
+        info!("Handling didOpen: {:?}", params);
     }
 
     pub fn handle_did_change(&mut self, params: Json) {
-        self.logger
-            .log(&format!("Handling didChange: {:?}", params))
-            .unwrap();
+        info!("Handling didChange: {:?}", params);
     }
 
     pub fn handle_did_close(&mut self, params: Json) {
-        self.logger
-            .log(&format!("Handling didClose: {:?}", params))
-            .unwrap();
+        info!("Handling didClose: {:?}", params);
     }
 
     pub fn read_message(&mut self) -> io::Result<String> {
@@ -138,9 +132,7 @@ impl<'a> LspHandler<'a> {
                 content_length = match value.trim().parse() {
                     Ok(length) => length,
                     Err(e) => {
-                        self.logger
-                            .log(&format!("Error parsing Content-Length: {}", e))
-                            .unwrap();
+                        error!("Invalid Content-Length: {}", e);
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidData,
                             "Invalid Content-Length",

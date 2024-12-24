@@ -1,31 +1,43 @@
-mod log;
+use std::{io::{self, Write}, result};
+
 mod lsp;
 mod rpc;
+use log::info;
+use serde_json::to_string;
+use simplelog::*;
+use std::fs::File;
 
 fn main() {
-    let mut logger = log::Logger::new("lsp.log").unwrap();
-    let mut lsp_handler = lsp::LspHandler::new(&mut logger);
+    // Initialize the logger to save to file
+    CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::Info,
+        Config::default(),
+        File::create("lsp.log").unwrap(),
+    )])
+    .unwrap();
 
+    // Create a new LSP handler
+    let mut lsp_handler = lsp::LspHandler::new();
     loop {
         match lsp_handler.read_message() {
             Ok(message) => {
-                let decoded = rpc::decode(message);
-                let response = match lsp_handler.handle_response(decoded) {
-                    lsp::LspResult::Success(Some(response)) => response,
-                    lsp::LspResult::Success(None) => {
-                        // No response to send (no point in handling this case)
-                        continue;
-                    }
-                    lsp::LspResult::Error(_) => {
-                        // TODO: improve error handling. Perhaps log tracing to the client?
-                        continue;
-                    }
+                info!("Received message: {:?}", message);
+
+                let (jsonrpc, id, method, params) = rpc::decode(message);
+                let result = match lsp_handler.handle_response(method, params) {
+                    lsp::LspResult::Success(result) => result,
+                    lsp::LspResult::Error(_) => continue,
                 };
 
-                let encoded = rpc::encode(response);
-                println!("{}", encoded);
+                let encoded = rpc::encode(jsonrpc, id, result);
+                info!("Sending message: {:?}", encoded);
+                // Add the Content-Length header
+                let content_length = encoded.len();
+                let header = format!("Content-Length: {}\r\n\r\n", content_length);
+                io::stdout().write_all(header.as_bytes()).unwrap();
+                io::stdout().write_all(encoded.as_bytes()).unwrap();
+                io::stdout().flush().unwrap();
             }
-            // TODO: improve error handling. Perhaps log tracing to the client?
             Err(_) => {}
         }
     }
