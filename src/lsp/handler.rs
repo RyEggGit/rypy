@@ -1,26 +1,63 @@
 use std::io::{self, BufRead, Read};
 
-use log::{debug, error, info};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as Json};
 
-use crate::lsp::lifecycle::{ServerCapabilities, ServerInfo};
+use super::document_sync::DidOpenTextDocumentParams;
+use super::lifecycle::{InitializeResult, ServerCapabilities, ServerInfo};
 
-use super::lifecycle::InitializeResult;
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum LspResult {
-    Success(Json),
-    Warning(String),
-    Error(String),
-}
 pub struct LspHandler {}
 
 impl LspHandler {
-    pub fn new() -> LspHandler {
-        return LspHandler {};
+    /// Handles a JSON-RPC message.
+    pub fn initialize() -> LspHandler {
+        LspHandler {}
     }
 
+    pub fn handle_response(
+        &mut self,
+        method: String,
+        params: Json,
+    ) -> Result<Option<Json>, String> {
+        info!("Received method: {:?}", method);
+        match method.as_str() {
+            "initialize" => {
+                let result = self.handle_initialize();
+                return Ok(Some(json!(result)));
+            }
+            "initialized" => {
+                return Ok(None);
+            }
+            "shutdown" => {
+                return Ok(None);
+            }
+            "exit" => {
+                return Ok(None);
+            }
+            "textDocument/didOpen" => match self.handle_open_document(params) {
+                Ok(_) => {
+                    info!("Opened document");
+                    return Ok(None);
+                }
+                Err(e) => {
+                    error!("Failed to open document: {}", e);
+                    return Ok(None);
+                }
+            },
+            "textDocument/didChange" => {
+                return Ok(None);
+            }
+            "textDocument/didClose" => {
+                return Ok(None);
+            }
+            _ => {
+                return Err(format!("Unknown method: {}", method));
+            }
+        };
+    }
+
+    /// Handles the `initialize` request.
     pub fn handle_initialize(&mut self) -> InitializeResult {
         InitializeResult {
             capabilities: ServerCapabilities {
@@ -29,47 +66,23 @@ impl LspHandler {
                 definition_provider: Some(true),
             },
             server_info: Some(ServerInfo {
-                name: "My Language Server".to_string(),
-                version: Some("1.0.0".to_string()),
+                name: "rypy 🐍".to_string(),
+                version: Some("0.0.0".to_string()),
             }),
         }
     }
 
-    pub fn handle_response(&mut self, method: String, _: Json) -> LspResult {
-        debug!("Received method: {:?}", method);
-        let response = match method.as_str() {
-            "initialize" => {
-                let result = self.handle_initialize();
-                json!(result)
-            }
-            "initialized" => {
-                return LspResult::Warning(
-                    "Client was initalized. Using this as no response".to_string(),
-                );
-            }
-            "shutdown" => {
-                json!(null)
-            }
-            "exit" => {
-                json!(null)
-            }
-            "textDocument/didOpen" => {
-                json!({"result": null})
-            }
-            "textDocument/didChange" => {
-                json!({"result": null})
-            }
-            "textDocument/didClose" => {
-                json!({"result": null})
-            }
-            _ => {
-                return LspResult::Error("Method not found".to_string());
-            }
-        };
-
-        return LspResult::Success(response);
+    /// Handles the `textDocument/didOpen` notification.
+    pub fn handle_open_document(
+        &mut self,
+        params: Json,
+    ) -> Result<DidOpenTextDocumentParams, String> {
+        let params: DidOpenTextDocumentParams = serde_json::from_value(params)
+            .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+        Ok(params)
     }
 
+    /// Extracts the JSON-RPC message from stdin.
     pub fn read_message(&mut self) -> io::Result<String> {
         let stdin = io::stdin();
         let mut handle = stdin.lock();

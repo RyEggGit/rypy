@@ -1,22 +1,21 @@
-use std::io::{self, Write};
+use log::{debug, error};
+use std::fs::File;
+use std::io::Write;
 
 mod lsp;
 mod rpc;
-use log::{debug, error, info, warn};
-use simplelog::*;
-use std::fs::File;
 
 fn main() {
     // Initialize the logger to save to file
-    CombinedLogger::init(vec![WriteLogger::new(
-        LevelFilter::Debug,
-        Config::default(),
+    simplelog::CombinedLogger::init(vec![simplelog::WriteLogger::new(
+        simplelog::LevelFilter::Debug,
+        simplelog::Config::default(),
         File::create("lsp.log").unwrap(),
     )])
     .unwrap();
 
     // Create a new LSP handler
-    let mut lsp_handler = lsp::handler::LspHandler::new();
+    let mut lsp_handler = lsp::handler::LspHandler::initialize();
     loop {
         match lsp_handler.read_message() {
             Ok(message) => {
@@ -31,12 +30,11 @@ fn main() {
                 };
 
                 let result = match lsp_handler.handle_response(method, params) {
-                    lsp::handler::LspResult::Success(result) => result,
-                    lsp::handler::LspResult::Warning(warning) => {
-                        warn!("Warning: {:?}", warning);
-                        continue;
-                    }
-                    lsp::handler::LspResult::Error(error) => {
+                    Ok(result) => match result {
+                        Some(result) => result,
+                        None => continue,
+                    },
+                    Err(error) => { 
                         error!("Error: {:?}", error);
                         continue;
                     }
@@ -47,8 +45,8 @@ fn main() {
                 // Add the Content-Length header
                 let content_length = encoded.len();
                 let message = format!("Content-Length: {}\r\n\r\n{}", content_length, encoded);
-                io::stdout().write_all(message.as_bytes()).unwrap();
-                io::stdout().flush().unwrap();
+                std::io::stdout().write_all(message.as_bytes()).unwrap();
+                std::io::stdout().flush().unwrap();
             }
             Err(e) => {
                 error!("Error reading message: {:?}", e);
