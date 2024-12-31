@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Read};
 
-use log::{error, info};
+use log::{error, info, warn};
 use serde_json::{json, Value as Json};
 
 use super::document_sync::DidOpenTextDocumentParams;
@@ -10,13 +10,17 @@ use crate::parser::{parser::Parser, parser::TreeSitterParser};
 
 pub struct LspHandler {
     parser: Box<dyn Parser>,
+    shutdown: bool,
 }
 
 impl LspHandler {
     /// Handles a JSON-RPC message.
     pub fn initialize() -> Result<Self, Box<dyn std::error::Error>> {
         let parser: Box<dyn Parser> = Box::new(TreeSitterParser::new()?);
-        Ok(Self { parser })
+        Ok(Self {
+            parser,
+            shutdown: false,
+        })
     }
 
     pub fn handle_response(
@@ -25,14 +29,25 @@ impl LspHandler {
         params: Json,
     ) -> Result<Option<Json>, String> {
         info!("Received method: {:?}", method);
+        // Check if client requested shutdown
+        if self.shutdown && method != "exit" {
+            return Err("Server is shutting down".to_string());
+        }
         match method.as_str() {
             "initialize" => {
                 let result = self.handle_initialize();
                 Ok(Some(json!(result)))
             }
             "initialized" => Ok(None),
-            "shutdown" => Ok(None),
-            "exit" => Ok(None),
+            "shutdown" => {
+                self.handle_shutdown();
+                warn!("Shutting down");
+                Ok(Some(json!(null)))
+            }
+            "exit" => {
+                info!("Exiting");
+                Ok(None)
+            }
             "textDocument/didOpen" => match self.handle_open_document(params) {
                 Ok(_) => {
                     info!("Opened document");
@@ -83,6 +98,11 @@ impl LspHandler {
             .map_err(|e| format!("Failed to parse: {:?}", e))?;
 
         Ok(params)
+    }
+
+    /// Handles the `shutdown` notification.
+    pub fn handle_shutdown(&mut self) {
+        self.shutdown = true;
     }
 
     /// Extracts the JSON-RPC message from stdin.
