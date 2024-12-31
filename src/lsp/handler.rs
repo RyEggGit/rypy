@@ -1,18 +1,22 @@
 use std::io::{self, BufRead, Read};
 
 use log::{error, info};
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as Json};
 
 use super::document_sync::DidOpenTextDocumentParams;
 use super::lifecycle::{InitializeResult, ServerCapabilities, ServerInfo};
 
-pub struct LspHandler {}
+use crate::parser::{parser::Parser, parser::TreeSitterParser};
+
+pub struct LspHandler {
+    parser: Box<dyn Parser>,
+}
 
 impl LspHandler {
     /// Handles a JSON-RPC message.
-    pub fn initialize() -> LspHandler {
-        LspHandler {}
+    pub fn initialize() -> Result<Self, Box<dyn std::error::Error>> {
+        let parser: Box<dyn Parser> = Box::new(TreeSitterParser::new()?);
+        Ok(Self { parser })
     }
 
     pub fn handle_response(
@@ -24,41 +28,31 @@ impl LspHandler {
         match method.as_str() {
             "initialize" => {
                 let result = self.handle_initialize();
-                return Ok(Some(json!(result)));
+                Ok(Some(json!(result)))
             }
-            "initialized" => {
-                return Ok(None);
-            }
-            "shutdown" => {
-                return Ok(None);
-            }
-            "exit" => {
-                return Ok(None);
-            }
+            "initialized" => Ok(None),
+            "shutdown" => Ok(None),
+            "exit" => Ok(None),
             "textDocument/didOpen" => match self.handle_open_document(params) {
                 Ok(_) => {
                     info!("Opened document");
-                    return Ok(None);
+                    Ok(None)
                 }
                 Err(e) => {
                     error!("Failed to open document: {}", e);
-                    return Ok(None);
+                    Err(e)
                 }
             },
-            "textDocument/didChange" => {
-                return Ok(None);
-            }
-            "textDocument/didClose" => {
-                return Ok(None);
-            }
-            _ => {
-                return Err(format!("Unknown method: {}", method));
-            }
-        };
+            "textDocument/didChange" => Ok(None),
+            "textDocument/didClose" => Ok(None),
+            _ => Err(format!("Unknown method: {}", method)),
+        }
     }
 
     /// Handles the `initialize` request.
     pub fn handle_initialize(&mut self) -> InitializeResult {
+        // Return the server capabilities
+        // (textDocumentSync, hoverProvider, definitionProvider are default)
         InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(1),
@@ -77,8 +71,17 @@ impl LspHandler {
         &mut self,
         params: Json,
     ) -> Result<DidOpenTextDocumentParams, String> {
+        // Deserialize the params
         let params: DidOpenTextDocumentParams = serde_json::from_value(params)
             .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+
+        // Parse the document
+        let text = params.text_document.text.clone();
+        let _tree = self
+            .parser
+            .parse(&text)
+            .map_err(|e| format!("Failed to parse: {:?}", e))?;
+
         Ok(params)
     }
 
