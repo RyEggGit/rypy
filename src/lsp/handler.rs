@@ -66,12 +66,11 @@ impl LspHandler {
 
     /// Handles the `initialize` request.
     pub fn handle_initialize(&mut self) -> InitializeResult {
-        // Return the server capabilities
-        // (textDocumentSync, hoverProvider, definitionProvider are default)
+        // Return the server capabilities and info
         InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(1),
-                hover_provider: Some(true),
+                hover_provider: Some(false),
                 definition_provider: Some(true),
             },
             server_info: Some(ServerInfo {
@@ -94,8 +93,7 @@ impl LspHandler {
         let text = params.text_document.text.clone();
         let _tree = self
             .parser
-            .parse(&text)
-            .map_err(|e| format!("Failed to parse: {:?}", e))?;
+            .parse(&text);
 
         Ok(params)
     }
