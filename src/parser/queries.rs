@@ -8,16 +8,17 @@ pub fn get_declaration_query() -> Result<tree_sitter::Query, tree_sitter::QueryE
           name: (identifier) @class.def)
         (assignment 
           left: (identifier) @variable.def)
+        (parameters 
+          (identifier) @variable.def)
     "#,
     )
 }
 
-pub fn get_reference_query() -> tree_sitter::Query {
+pub fn get_reference_query() -> Result<tree_sitter::Query, tree_sitter::QueryError> {
     tree_sitter::Query::new(
         &tree_sitter_python::LANGUAGE.into(),
         r#"
         (identifier) @reference
     "#,
     )
-    .unwrap()
 }

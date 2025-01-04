@@ -1,12 +1,15 @@
+use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
+use salsa::debug;
 use serde_json::{json, Value as Json};
 
 use super::document_sync::DidOpenTextDocumentParams;
 use super::lifecycle::{InitializeResult, ServerCapabilities, ServerInfo};
 
 use crate::parser::{parser::Parser, parser::TreeSitterParser};
+use crate::semantics::{self, reference, symbol};
 
 pub struct LspHandler {
     parser: Box<dyn Parser>,
@@ -91,9 +94,19 @@ impl LspHandler {
 
         // Parse the document
         let text = params.text_document.text.clone();
-        let _tree = self
+        let (declarations, references) = self
             .parser
-            .parse(&text);
+            .parse(&text)
+            .map_err(|_| format!("Failed to parse: {}", params.text_document.uri))?;
+
+        // Get the symbol's references
+        let references = semantics::reference::ReferenceGraph::build(declarations, references);
+
+        debug!("Symbol: {:?}", references.get_symbol("module::test:x"));
+        debug!(
+            "References: {:?}",
+            references.get_references("module::test:x")
+        );
 
         Ok(params)
     }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use log::debug;
 use salsa::debug;
 use serde::de;
@@ -16,7 +18,10 @@ pub trait Parser {
         Self: Sized;
 
     /// Parse the given source code and return a synstax tree
-    fn parse(&mut self, source: &str) -> Result<Vec<symbol::Symbol>, Vec<symbol::SyntaxError>>;
+    fn parse(
+        &mut self,
+        source: &str,
+    ) -> Result<(Vec<symbol::Symbol>, Vec<symbol::Reference>), Vec<symbol::SyntaxError>>;
 
     /// Get all syntax errors in the current tree
     fn get_errors(&self) -> Vec<symbol::SyntaxError>;
@@ -35,7 +40,10 @@ impl Parser for TreeSitterParser {
         Ok(Self { parser })
     }
 
-    fn parse(&mut self, source: &str) -> Result<Vec<symbol::Symbol>, Vec<symbol::SyntaxError>> {
+    fn parse(
+        &mut self,
+        source: &str,
+    ) -> Result<(Vec<symbol::Symbol>, Vec<symbol::Reference>), Vec<symbol::SyntaxError>> {
         let tree = self.parser.parse(source, None).ok_or_else(|| {
             vec![symbol::SyntaxError {
                 message: "Failed to parse".to_string(),
@@ -44,7 +52,7 @@ impl Parser for TreeSitterParser {
             }]
         })?;
 
-        // Collect symbols and references
+        // Collect symbols
         let mut collector = SymbolCollector::new(source.as_bytes());
         let errors = collector.collect_symbols(&tree);
 
@@ -57,9 +65,7 @@ impl Parser for TreeSitterParser {
             }]);
         }
 
-        debug!("Declarations: {:#?}", collector.declarations);
-
-        return Ok(collector.declarations);
+        return Ok((collector.declarations, collector.references));
     }
 
     fn get_errors(&self) -> Vec<symbol::SyntaxError> {
@@ -70,9 +76,9 @@ impl Parser for TreeSitterParser {
 
 /// A helper struct to convert tree-sitter nodes to perform
 /// symbol collection and scope analysis
-
 pub struct SymbolCollector<'a> {
     pub declarations: Vec<symbol::Symbol>,
+    pub references: Vec<symbol::Reference>,
 
     source: &'a [u8],
 }
@@ -82,6 +88,7 @@ impl<'a> SymbolCollector<'a> {
         Self {
             source,
             declarations: Vec::new(),
+            references: Vec::new(),
         }
     }
 
@@ -97,7 +104,7 @@ impl<'a> SymbolCollector<'a> {
         let mut matches = query_cursor.matches(&declaration_query, tree.root_node(), self.source);
 
         while let Some(m) = matches.next() {
-            for capture in m.captures.iter() {
+            for capture in m.captures {
                 let name = capture.node.utf8_text(self.source).unwrap().to_string();
                 let location = self.get_location(capture.node);
                 let scope_path = self.get_scope_path(capture.node);
@@ -106,6 +113,7 @@ impl<'a> SymbolCollector<'a> {
                     0 => symbol::SymbolKind::Function, // Function
                     1 => symbol::SymbolKind::Class,    // Class
                     2 => symbol::SymbolKind::Variable, // Assignment
+                    3 => symbol::SymbolKind::Variable, // Arguments
                     _ => {
                         debug!("Unknown symbol kind: {}", capture.index);
                         symbol::SymbolKind::Unknown
@@ -115,6 +123,35 @@ impl<'a> SymbolCollector<'a> {
                 self.declarations.push(symbol::Symbol {
                     name,
                     kind,
+                    location,
+                    scope_path,
+                });
+            }
+        }
+
+        // Collect references
+        let reference_query = queries::get_reference_query()
+            .map_err(|e| format!("Failed to get reference query: {}", e))?;
+
+        let mut query_cursor = tree_sitter::QueryCursor::new();
+        let mut matches = query_cursor.matches(&reference_query, tree.root_node(), self.source);
+
+        while let Some(m) = matches.next() {
+            for capture in m.captures {
+                // Skip nodes that are already captured as declarations
+                if declaration_query
+                    .capture_names()
+                    .contains(&capture.node.kind())
+                {
+                    continue;
+                }
+
+                let name = capture.node.utf8_text(self.source).unwrap().to_string();
+                let location = self.get_location(capture.node);
+                let scope_path = self.get_scope_path(capture.node);
+
+                self.references.push(symbol::Reference {
+                    name,
                     location,
                     scope_path,
                 });
