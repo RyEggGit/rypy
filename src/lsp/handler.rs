@@ -1,15 +1,13 @@
-use std::collections::HashMap;
 use std::io::{self, BufRead, Read};
 
 use log::{debug, error, info, warn};
-use salsa::debug;
 use serde_json::{json, Value as Json};
 
 use super::document_sync::DidOpenTextDocumentParams;
 use super::lifecycle::{InitializeResult, ServerCapabilities, ServerInfo};
 
 use crate::parser::{parser::Parser, parser::TreeSitterParser};
-use crate::semantics::{self, reference, symbol};
+use crate::semantics::{self};
 
 pub struct LspHandler {
     parser: Box<dyn Parser>,

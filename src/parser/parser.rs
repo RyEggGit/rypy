@@ -1,9 +1,4 @@
-use std::collections::HashMap;
-
 use log::debug;
-use salsa::debug;
-use serde::de;
-use tree_sitter::{QueryMatch, QueryMatches};
 
 use super::queries;
 use crate::semantics::symbol::{self};
@@ -110,10 +105,11 @@ impl<'a> SymbolCollector<'a> {
                 let scope_path = self.get_scope_path(capture.node);
 
                 let kind = match capture.index as u32 {
-                    0 => symbol::SymbolKind::Function, // Function
-                    1 => symbol::SymbolKind::Class,    // Class
-                    2 => symbol::SymbolKind::Variable, // Assignment
-                    3 => symbol::SymbolKind::Variable, // Arguments
+                    0 => symbol::SymbolKind::Function,  // Function
+                    1 => symbol::SymbolKind::Class,     // Class
+                    2 => symbol::SymbolKind::Variable,  // Assignment
+                    3 => symbol::SymbolKind::Parameter, // Parameters
+                    4 => symbol::SymbolKind::Module,    // Module
                     _ => {
                         debug!("Unknown symbol kind: {}", capture.index);
                         symbol::SymbolKind::Unknown
@@ -139,10 +135,10 @@ impl<'a> SymbolCollector<'a> {
         while let Some(m) = matches.next() {
             for capture in m.captures {
                 // Skip nodes that are already captured as declarations
-                if declaration_query
-                    .capture_names()
-                    .contains(&capture.node.kind())
-                {
+                if self.declarations.iter().any(|d| {
+                    d.location.start == self.get_location(capture.node).start
+                        && d.location.end == self.get_location(capture.node).end
+                }) {
                     continue;
                 }
 
@@ -194,5 +190,112 @@ impl<'a> SymbolCollector<'a> {
 
         path.reverse();
         path
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::semantics::symbol::{Location, Symbol, SymbolKind};
+
+    #[test]
+    fn basic_variable_test() {
+        let source_code = r#"
+        x = 42
+        "#;
+
+        let mut parser = TreeSitterParser::new().unwrap();
+        let (symbols, references) = parser.parse(source_code).unwrap();
+
+        // Account for some extra indentation to the start column
+        // to make the test code more readable
+        let ident_length = 8;
+
+        let expected_symbols = vec![Symbol {
+            name: "x".to_string(),
+            kind: SymbolKind::Variable,
+            location: Location {
+                start: (1, ident_length),
+                end: (1, 1 + ident_length),
+            },
+            scope_path: vec!["module".to_string()],
+        }];
+
+        assert_eq!(symbols, expected_symbols);
+        assert!(references.is_empty());
+    }
+
+    #[test]
+    fn basic_function_test() {
+        let source_code = r#"
+        def foo():
+            pass
+        "#;
+
+        let mut parser = TreeSitterParser::new().unwrap();
+        let (symbols, references) = parser.parse(source_code).unwrap();
+
+        // Account for some extra indentation to the start column
+        // to make the test code more readable
+        let ident_length = 8;
+
+        let expected_symbols = vec![Symbol {
+            name: "foo".to_string(),
+            kind: SymbolKind::Function,
+            location: Location {
+                start: (1, 4 + ident_length),
+                end: (1, 7 + ident_length),
+            },
+            scope_path: vec!["module".to_string(), "foo".to_string()],
+        }];
+
+        assert_eq!(symbols, expected_symbols);
+        assert!(references.is_empty());
+    }
+
+    #[test]
+    fn function_with_parameters() {
+        let source_code = r#"
+        def foo(a,b):
+            return a + b
+        "#;
+
+        let mut parser = TreeSitterParser::new().unwrap();
+        let (symbols, _) = parser.parse(source_code).unwrap();
+
+        // Account for some extra indentation to the start column
+        // to make the test code more readable
+        let ident_length = 8;
+
+        let expected_symbols = vec![
+            Symbol {
+                name: "foo".to_string(),
+                kind: SymbolKind::Function,
+                location: Location {
+                    start: (1, 4 + ident_length),
+                    end: (1, 7 + ident_length),
+                },
+                scope_path: vec!["module".to_string(), "foo".to_string()],
+            },
+            Symbol {
+                name: "a".to_string(),
+                kind: SymbolKind::Variable,
+                location: Location {
+                    start: (1, 8 + ident_length),
+                    end: (1, 9 + ident_length),
+                },
+                scope_path: vec!["module".to_string(), "foo".to_string()],
+            },
+            Symbol {
+                name: "b".to_string(),
+                kind: SymbolKind::Variable,
+                location: Location {
+                    start: (1, 10 + ident_length),
+                    end: (1, 11 + ident_length),
+                },
+                scope_path: vec!["module".to_string(), "foo".to_string()],
+            },
+        ];
+        assert_eq!(symbols, expected_symbols);
     }
 }

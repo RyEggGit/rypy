@@ -7,7 +7,7 @@ pub struct SyntaxError {
     pub column: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Symbol {
     pub name: String,
     pub kind: SymbolKind,
@@ -28,7 +28,7 @@ pub struct Location {
     pub end: (usize, usize),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
     Function,
     Variable,
