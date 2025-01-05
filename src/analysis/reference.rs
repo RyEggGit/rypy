@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::{
     lsp::document_sync::Position,
     parser::symbol::{self, Location},
@@ -20,14 +22,15 @@ impl ReferenceGraph {
         }
     }
 
-    /// Build the reference graph from collected symbols and references
-    pub fn build(symbols: Vec<symbol::Symbol>, references: Vec<symbol::Reference>) -> Self {
+    /// Build the reference graph from collected definitions and references
+    pub fn build(definitions: Vec<symbol::Symbol>, references: Vec<symbol::Reference>) -> Self {
         let mut graph = Self::new();
 
         // First, index all symbols by their unique ID (name + scope path)
-        for symbol in symbols {
-            let id = graph.create_symbol_id(&symbol.name, &symbol.scope_path);
-            graph.symbols.insert(id, symbol);
+        // (This will messup reassignment, so likely with need to add position in there somehow?)
+        for definition in definitions {
+            let id = graph.create_symbol_id(&definition.name, &definition.scope_path);
+            graph.symbols.insert(id, definition);
         }
 
         // Then resolve each reference to its symbol
@@ -108,6 +111,8 @@ impl ReferenceGraph {
 
     /// Resolve a reference to its corresponding symbol
     fn resolve_reference(&self, reference: &symbol::Reference) -> Option<String> {
+
+        debug!("Trying to find reference for symbol: {:?}", reference);
         // Start from the most specific scope and work outwards
         let mut current_scope = reference.scope_path.clone();
 

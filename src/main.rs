@@ -17,6 +17,7 @@ fn main() {
     )])
     .unwrap();
 
+
     // Create a new LSP handler
     let mut lsp_handler = match lsp::handler::LspHandler::initialize() {
         Ok(lsp_handler) => lsp_handler,

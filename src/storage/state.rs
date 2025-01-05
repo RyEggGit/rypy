@@ -47,6 +47,7 @@ impl LspState {
         self.opened_uri = None;
     }
 
+
     pub fn get_definition(
         &mut self,
         params: GotoDefinitionParams,

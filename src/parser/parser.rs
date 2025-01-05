@@ -125,6 +125,11 @@ impl<'a> SymbolCollector<'a> {
             }
         }
 
+        // Log the names of all the symbol declarations
+        for symbol in &self.declarations {
+            debug!("Symbol declaration: {:?}", symbol);
+        }
+
         // Collect references
         let reference_query = queries::get_reference_query()
             .map_err(|e| format!("Failed to get reference query: {}", e))?;
@@ -134,24 +139,31 @@ impl<'a> SymbolCollector<'a> {
 
         while let Some(m) = matches.next() {
             for capture in m.captures {
+                let node_location = self.get_location(capture.node);
                 // Skip nodes that are already captured as declarations
-                if self.declarations.iter().any(|d| {
-                    d.location.start == self.get_location(capture.node).start
-                        && d.location.end == self.get_location(capture.node).end
-                }) {
+                if self
+                    .declarations
+                    .iter()
+                    .any(|d| d.location == node_location)
+                {
                     continue;
                 }
 
                 let name = capture.node.utf8_text(self.source).unwrap().to_string();
-                let location = self.get_location(capture.node);
                 let scope_path = self.get_scope_path(capture.node);
 
                 self.references.push(symbol::Reference {
                     name,
-                    location,
+                    location: node_location,
                     scope_path,
                 });
             }
+        }
+
+        // Log all the references
+
+        for symbol in &self.references {
+            debug!("Symbol reference: {:?}", symbol);
         }
 
         return Ok(());
@@ -170,16 +182,6 @@ impl<'a> SymbolCollector<'a> {
 
         while let Some(parent) = current {
             match parent.kind() {
-                "function_definition" | "class_definition" => {
-                    if let Some(name_node) = parent
-                        .children(&mut parent.walk())
-                        .find(|n| n.kind() == "identifier")
-                    {
-                        if let Ok(name) = name_node.utf8_text(self.source) {
-                            path.push(name.to_string());
-                        }
-                    }
-                }
                 "module" => {
                     path.push("module".to_string());
                 }

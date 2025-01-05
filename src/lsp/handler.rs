@@ -41,7 +41,7 @@ impl LspHandler {
             }
             "initialized" => Ok(None),
             "shutdown" => {
-                self.handle_shutdown();
+                self.shutdown = true;
                 warn!("Shutting down");
                 Ok(Some(json!(null)))
             }
@@ -101,11 +101,6 @@ impl LspHandler {
             Some(location) => Ok(location),
             None => Err("Definition not found".to_string()),
         }
-    }
-
-    /// Handles the `shutdown` notification.
-    pub fn handle_shutdown(&mut self) {
-        self.shutdown = true;
     }
 
     /// Extracts the JSON-RPC message from stdin.
