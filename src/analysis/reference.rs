@@ -1,8 +1,10 @@
+use crate::{
+    lsp::document_sync::Position,
+    parser::symbol::{self, Location},
+};
 use std::collections::HashMap;
 
-use super::symbol;
-
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReferenceGraph {
     // Map from symbol ID to the actual symbol
     symbols: HashMap<String, symbol::Symbol>,
@@ -43,7 +45,7 @@ impl ReferenceGraph {
     }
 
     /// Get all references to a symbol
-    pub fn get_references(&self, symbol_id: &str) -> Vec<&symbol::Reference> {
+    pub fn _get_references(&self, symbol_id: &str) -> Vec<&symbol::Reference> {
         self.references
             .get(symbol_id)
             .map(|refs| refs.iter().collect())
@@ -51,8 +53,52 @@ impl ReferenceGraph {
     }
 
     /// Get a symbol by its ID
-    pub fn get_symbol(&self, symbol_id: &str) -> Option<&symbol::Symbol> {
+    pub fn get_symbol_by_id(&self, symbol_id: &str) -> Option<&symbol::Symbol> {
         self.symbols.get(symbol_id)
+    }
+
+    /// Get symbol by position (this is going to be a slow operation for now
+    /// until I think of a better way of implementing this. Likely moving the
+    /// computation over to salsa)
+    pub fn get_symbol_by_location(&self, position: Position) -> Option<&symbol::Symbol> {
+        for symbol in self.symbols.values() {
+            let Location { start, end } = symbol.location;
+            if start.0 <= position.line
+                && end.0 >= position.line
+                && start.1 <= position.character
+                && end.1 >= position.character
+            {
+                return Some(symbol);
+            }
+        }
+        None
+    }
+
+    /// Find the definition location for a symbol at the given position.
+    /// Returns the Symbol if found, which contains the definition location.
+    pub fn find_definition(&self, position: Position) -> Option<&symbol::Symbol> {
+        // First check if we're directly on a symbol definition
+        if let Some(symbol) = self.get_symbol_by_location(position.clone()) {
+            return Some(symbol);
+        }
+
+        // Check all references to find one at this position
+        for (symbol_id, references) in &self.references {
+            for reference in references {
+                let Location { start, end } = reference.location;
+                // Check if position is within this reference
+                if start.0 <= position.line 
+                    && end.0 >= position.line
+                    && start.1 <= position.character
+                    && end.1 >= position.character 
+                {
+                    // Found a reference at this position, return its symbol
+                    return self.get_symbol_by_id(symbol_id);
+                }
+            }
+        }
+
+        None
     }
 
     /// Create a unique ID for a symbol based on its name and scope path

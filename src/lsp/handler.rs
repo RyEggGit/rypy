@@ -1,26 +1,26 @@
 use std::io::{self, BufRead, Read};
 
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use serde_json::{json, Value as Json};
 
 use super::document_sync::DidOpenTextDocumentParams;
+use super::language_features::Location;
 use super::lifecycle::{InitializeResult, ServerCapabilities, ServerInfo};
 
-use crate::parser::{parser::Parser, parser::TreeSitterParser};
-use crate::semantics::{self};
+use crate::lsp::language_features::GotoDefinitionParams;
+use crate::storage::state::LspState;
 
 pub struct LspHandler {
-    parser: Box<dyn Parser>,
     shutdown: bool,
+    state: LspState,
 }
 
 impl LspHandler {
     /// Handles a JSON-RPC message.
     pub fn initialize() -> Result<Self, Box<dyn std::error::Error>> {
-        let parser: Box<dyn Parser> = Box::new(TreeSitterParser::new()?);
         Ok(Self {
-            parser,
             shutdown: false,
+            state: LspState::new(),
         })
     }
 
@@ -49,18 +49,20 @@ impl LspHandler {
                 info!("Exiting");
                 Ok(None)
             }
-            "textDocument/didOpen" => match self.handle_open_document(params) {
-                Ok(_) => {
-                    info!("Opened document");
-                    Ok(None)
-                }
-                Err(e) => {
-                    error!("Failed to open document: {}", e);
-                    Err(e)
-                }
-            },
+            "textDocument/didOpen" => {
+                let params: DidOpenTextDocumentParams = serde_json::from_value(params)
+                    .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+                let result = self.handle_open_document(params)?;
+                Ok(Some(json!(result)))
+            }
             "textDocument/didChange" => Ok(None),
             "textDocument/didClose" => Ok(None),
+            "textDocument/definition" => {
+                let params: GotoDefinitionParams = serde_json::from_value(params)
+                    .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+                let result = self.handle_go_to_definition(params)?;
+                Ok(Some(json!(result)))
+            }
             _ => Err(format!("Unknown method: {}", method)),
         }
     }
@@ -84,29 +86,21 @@ impl LspHandler {
     /// Handles the `textDocument/didOpen` notification.
     pub fn handle_open_document(
         &mut self,
-        params: Json,
-    ) -> Result<DidOpenTextDocumentParams, String> {
-        // Deserialize the params
-        let params: DidOpenTextDocumentParams = serde_json::from_value(params)
-            .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+        params: DidOpenTextDocumentParams,
+    ) -> Result<(), String> {
+        self.state.open_document(params);
+        Ok(())
+    }
 
-        // Parse the document
-        let text = params.text_document.text.clone();
-        let (declarations, references) = self
-            .parser
-            .parse(&text)
-            .map_err(|_| format!("Failed to parse: {}", params.text_document.uri))?;
-
-        // Get the symbol's references
-        let references = semantics::reference::ReferenceGraph::build(declarations, references);
-
-        debug!("Symbol: {:?}", references.get_symbol("module::test:x"));
-        debug!(
-            "References: {:?}",
-            references.get_references("module::test:x")
-        );
-
-        Ok(params)
+    /// Handles the `textDocument/definition` request.
+    pub fn handle_go_to_definition(
+        &mut self,
+        params: GotoDefinitionParams,
+    ) -> Result<Location, String> {
+        match self.state.get_definition(params) {
+            Some(location) => Ok(location),
+            None => Err("Definition not found".to_string()),
+        }
     }
 
     /// Handles the `shutdown` notification.

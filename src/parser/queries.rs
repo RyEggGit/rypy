@@ -10,6 +10,10 @@ pub fn get_declaration_query() -> Result<tree_sitter::Query, tree_sitter::QueryE
           left: (identifier) @variable.def)
         (parameters 
           (identifier) @variable.def)
+        (import_statement
+          (dotted_name (identifier) @module.def))
+
+
     "#,
     )
 }
@@ -22,3 +26,4 @@ pub fn get_reference_query() -> Result<tree_sitter::Query, tree_sitter::QueryErr
     "#,
     )
 }
+

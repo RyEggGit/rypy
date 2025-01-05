@@ -1,3 +1,4 @@
 pub mod handler;
 pub mod lifecycle;
-mod document_sync;
+pub mod document_sync;
+pub mod language_features;

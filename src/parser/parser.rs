@@ -1,7 +1,7 @@
 use log::debug;
 
 use super::queries;
-use crate::semantics::symbol::{self};
+use super::symbol;
 
 use streaming_iterator::StreamingIterator;
 
@@ -19,7 +19,7 @@ pub trait Parser {
     ) -> Result<(Vec<symbol::Symbol>, Vec<symbol::Reference>), Vec<symbol::SyntaxError>>;
 
     /// Get all syntax errors in the current tree
-    fn get_errors(&self) -> Vec<symbol::SyntaxError>;
+    fn _get_errors(&self) -> Vec<symbol::SyntaxError>;
 }
 
 /// Tree-sitter implementation of the Parser trait
@@ -63,7 +63,7 @@ impl Parser for TreeSitterParser {
         return Ok((collector.declarations, collector.references));
     }
 
-    fn get_errors(&self) -> Vec<symbol::SyntaxError> {
+    fn _get_errors(&self) -> Vec<symbol::SyntaxError> {
         // TODO: Implement error collection from tree-sitter
         Vec::new()
     }
@@ -196,7 +196,7 @@ impl<'a> SymbolCollector<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantics::symbol::{Location, Symbol, SymbolKind};
+    use symbol::{Location, Symbol, SymbolKind};
 
     #[test]
     fn basic_variable_test() {

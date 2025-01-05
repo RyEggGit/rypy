@@ -5,7 +5,8 @@ use std::io::Write;
 mod lsp;
 mod parser;
 mod rpc;
-mod semantics;
+mod analysis;
+mod storage;
 
 fn main() {
     // Initialize the logger to save to file

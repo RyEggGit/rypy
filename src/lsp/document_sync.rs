@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+type Version = i32;
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DidOpenTextDocumentParams {
@@ -11,7 +13,7 @@ pub struct DidOpenTextDocumentParams {
 pub struct TextDocumentItem {
     pub uri: String,
     pub language_id: String,
-    pub version: i64,
+    pub version: Version,
     pub text: String,
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -24,7 +26,7 @@ pub struct DidChangeTextDocumentParams {
 #[serde(rename_all = "camelCase")]
 pub struct VersionedTextDocumentIdentifier {
     pub uri: String,
-    pub version: i64,
+    pub version: Version,
 }
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -39,11 +41,11 @@ pub struct Range {
     pub start: Position,
     pub end: Position,
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Position {
-    pub line: i64,
-    pub character: i64,
+    pub line: usize,
+    pub character: usize,
 }
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

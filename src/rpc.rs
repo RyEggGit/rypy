@@ -1,15 +1,5 @@
 use serde_json::Value as Json;
 
-pub fn encode_request(jsonrpc: String, id: Option<i64>, method: String, params: Json) -> String {
-    let message = serde_json::json!({
-        "jsonrpc": jsonrpc,
-        "id": id,
-        "method": method,
-        "params": params
-    });
-    message.to_string()
-}
-
 pub fn encode_response(jsonrpc: String, id: Option<i64>, result: Json) -> String {
     let message = serde_json::json!({
         "jsonrpc": jsonrpc,
@@ -43,7 +33,17 @@ pub fn decode_request(message: String) -> Result<(String, Option<i64>, String, J
 #[cfg(test)]
 mod main_tests {
     use crate::rpc;
-    use serde_json::json;
+    use serde_json::{json, Value as Json};
+
+    fn encode_request(jsonrpc: String, id: Option<i64>, method: String, params: Json) -> String {
+        let message = serde_json::json!({
+            "jsonrpc": jsonrpc,
+            "id": id,
+            "method": method,
+            "params": params
+        });
+        message.to_string()
+    }
 
     #[test]
     fn test_encode_decode() {
@@ -61,7 +61,7 @@ mod main_tests {
             }),
         );
 
-        let encoded = rpc::encode_request(
+        let encoded = encode_request(
             original.0.clone(),
             original.1,
             original.2.clone(),
