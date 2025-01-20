@@ -11,4 +11,4 @@ Learning LSP's by implementing a small subset of features for python.
 - [ ] Add support for bultins
 
 ### Goto Definition Demo
-<video controls src="20250120-1805-09.3046809.mp4" title="Title"></video>
+<video controls src="misc/20250120-1805-09.3046809.mp4" title="Title"></video>
