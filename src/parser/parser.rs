@@ -161,7 +161,6 @@ impl<'a> SymbolCollector<'a> {
         }
 
         // Log all the references
-
         for symbol in &self.references {
             debug!("Symbol reference: {:?}", symbol);
         }
@@ -248,7 +247,7 @@ mod tests {
                 start: (1, 4 + ident_length),
                 end: (1, 7 + ident_length),
             },
-            scope_path: vec!["module".to_string(), "foo".to_string()],
+            scope_path: vec!["module".to_string()],
         }];
 
         assert_eq!(symbols, expected_symbols);
@@ -277,7 +276,7 @@ mod tests {
                     start: (1, 4 + ident_length),
                     end: (1, 7 + ident_length),
                 },
-                scope_path: vec!["module".to_string(), "foo".to_string()],
+                scope_path: vec!["module".to_string()],
             },
             Symbol {
                 name: "a".to_string(),

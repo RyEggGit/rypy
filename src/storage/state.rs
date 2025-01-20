@@ -33,7 +33,7 @@ impl LspState {
         self.opened_uri = Some(uri);
     }
 
-    pub fn _update_document(&mut self, params: DidChangeTextDocumentParams) {
+    pub fn update_document(&mut self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
         if let Some(change) = params.content_changes.into_iter().last() {
             self.db
@@ -43,10 +43,10 @@ impl LspState {
         }
     }
 
-    pub fn _close_document(&mut self, _params: DidCloseTextDocumentParams) {
+    pub fn close_document(&mut self, _params: DidCloseTextDocumentParams) {
+        // TODO: Add proper error handling
         self.opened_uri = None;
     }
-
 
     pub fn get_definition(
         &mut self,
@@ -64,8 +64,7 @@ impl LspState {
         let reference_graph = self.db.document_reference_graph(uri.clone())?;
 
         // Get the symbol's definiton
-        let symbol_definition =
-            reference_graph.find_definition(params.position)?;
+        let symbol_definition = reference_graph.find_definition(params.position)?;
 
         // Create the response
         let location = language_features::Location {

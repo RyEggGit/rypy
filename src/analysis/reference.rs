@@ -9,16 +9,20 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReferenceGraph {
     // Map from symbol ID to the actual symbol
-    symbols: HashMap<String, symbol::Symbol>,
+    definitions: HashMap<String, Vec<symbol::Symbol>>,
+
+    references: Vec<symbol::Reference>,
+
     // Map from symbol ID to its references
-    references: HashMap<String, Vec<symbol::Reference>>,
+    resolved_references: HashMap<String, symbol::Symbol>,
 }
 
 impl ReferenceGraph {
     pub fn new() -> Self {
         Self {
-            symbols: HashMap::new(),
-            references: HashMap::new(),
+            definitions: HashMap::new(),
+            references: Vec::new(),
+            resolved_references: HashMap::new(),
         }
     }
 
@@ -27,44 +31,29 @@ impl ReferenceGraph {
         let mut graph = Self::new();
 
         // First, index all symbols by their unique ID (name + scope path)
-        // (This will messup reassignment, so likely with need to add position in there somehow?)
         for definition in definitions {
-            let id = graph.create_symbol_id(&definition.name, &definition.scope_path);
-            graph.symbols.insert(id, definition);
+            let id = graph.create_symbol_scope_id(&definition.name, &definition.scope_path);
+            graph.definitions.entry(id).or_default().push(definition);
         }
 
+        graph.references = references;
+
         // Then resolve each reference to its symbol
-        for reference in references {
-            if let Some(symbol_id) = graph.resolve_reference(&reference) {
-                graph
-                    .references
-                    .entry(symbol_id)
-                    .or_default()
-                    .push(reference);
+        for reference in &graph.references {
+            if let Some(definition) = graph.resolve_reference(&reference) {
+                let definition_id = graph.create_symbol_id(&reference.name, &reference.location);
+                graph.resolved_references.insert(definition_id, definition);
             }
         }
 
         graph
     }
 
-    /// Get all references to a symbol
-    pub fn _get_references(&self, symbol_id: &str) -> Vec<&symbol::Reference> {
-        self.references
-            .get(symbol_id)
-            .map(|refs| refs.iter().collect())
-            .unwrap_or_default()
-    }
-
-    /// Get a symbol by its ID
-    pub fn get_symbol_by_id(&self, symbol_id: &str) -> Option<&symbol::Symbol> {
-        self.symbols.get(symbol_id)
-    }
-
     /// Get symbol by position (this is going to be a slow operation for now
     /// until I think of a better way of implementing this. Likely moving the
     /// computation over to salsa)
-    pub fn get_symbol_by_location(&self, position: Position) -> Option<&symbol::Symbol> {
-        for symbol in self.symbols.values() {
+    pub fn get_symbol_by_location(&self, position: Position) -> Option<&symbol::Reference> {
+        for symbol in &self.references {
             let Location { start, end } = symbol.location;
             if start.0 <= position.line
                 && end.0 >= position.line
@@ -80,59 +69,77 @@ impl ReferenceGraph {
     /// Find the definition location for a symbol at the given position.
     /// Returns the Symbol if found, which contains the definition location.
     pub fn find_definition(&self, position: Position) -> Option<&symbol::Symbol> {
-        // First check if we're directly on a symbol definition
-        if let Some(symbol) = self.get_symbol_by_location(position.clone()) {
-            return Some(symbol);
-        }
+        // First get the symbol 
+        let reference = self.get_symbol_by_location(position)?;
 
-        // Check all references to find one at this position
-        for (symbol_id, references) in &self.references {
-            for reference in references {
-                let Location { start, end } = reference.location;
-                // Check if position is within this reference
-                if start.0 <= position.line 
-                    && end.0 >= position.line
-                    && start.1 <= position.character
-                    && end.1 >= position.character 
-                {
-                    // Found a reference at this position, return its symbol
-                    return self.get_symbol_by_id(symbol_id);
-                }
-            }
-        }
+        // Get the symbols id
+        let id = self.create_symbol_id(&reference.name, &reference.location);
 
-        None
+        // Return the definition of the reference
+        self.resolved_references.get(&id)
     }
 
-    /// Create a unique ID for a symbol based on its name and scope path
-    fn create_symbol_id(&self, name: &str, scope_path: &[String]) -> String {
-        format!("{}:{}", scope_path.join("::"), name)
+    /// Create a ID for a symbol based on its name, scope path (! not unique)
+    fn create_symbol_scope_id(&self, name: &str, scope_path: &[String]) -> String {
+        format!("{}:{}", scope_path.join("/"), name)
     }
 
-    /// Resolve a reference to its corresponding symbol
-    fn resolve_reference(&self, reference: &symbol::Reference) -> Option<String> {
+    /// Create a unique ID for a symbol based on its name and location of first character
+    fn create_symbol_id(&self, name: &str, location: &Location) -> String {
+        format!("{}:{}|{}", name, location.start.0, location.start.1)
+    }
 
-        debug!("Trying to find reference for symbol: {:?}", reference);
+    /// Resolve a reference to its corresponding symbol by searching through scopes
+    /// from most specific to most general, returning the best matching definition
+    fn resolve_reference(&self, reference: &symbol::Reference) -> Option<symbol::Symbol> {
         // Start from the most specific scope and work outwards
         let mut current_scope = reference.scope_path.clone();
 
         while !current_scope.is_empty() {
             // Try to find the symbol in the current scope
-            let potential_id = self.create_symbol_id(&reference.name, &current_scope);
-            if self.symbols.contains_key(&potential_id) {
-                return Some(potential_id);
+            let definition_id = self.create_symbol_scope_id(&reference.name, &current_scope);
+
+            if let Some(definitions) = self.definitions.get(&definition_id) {
+                debug!(
+                    "Found symbols in scope {:?}: {:?}",
+                    current_scope, definitions
+                );
+
+                // Find the definition that is closest to the reference
+                // by comparing their locations
+                if let Some(best_definition) = definitions.iter().min_by_key(|d| {
+                    // If the definition is before the reference, use the distance between them
+                    // Otherwise, use a large value to prefer definitions that come before
+                    if d.location.start.0 <= reference.location.start.0 {
+                        reference.location.start.0 - d.location.start.0
+                    } else {
+                        std::usize::MAX
+                    }
+                }) {
+                    return Some(best_definition.clone());
+                }
             }
 
-            // Move up one scope level
+            // Move up one scope level if no suitable definition found
             current_scope.pop();
         }
 
         // Try global scope as last resort
-        let global_id = self.create_symbol_id(&reference.name, &["module".to_string()]);
-        if self.symbols.contains_key(&global_id) {
-            Some(global_id)
-        } else {
-            None
+        let global_id = self.create_symbol_scope_id(&reference.name, &["module".to_string()]);
+        if let Some(definitions) = self.definitions.get(&global_id) {
+            debug!("Found symbols in global scope: {:?}", definitions);
+            return definitions
+                .iter()
+                .min_by_key(|d| {
+                    if d.location.start.0 <= reference.location.start.0 {
+                        reference.location.start.0 - d.location.start.0
+                    } else {
+                        std::usize::MAX
+                    }
+                })
+                .cloned();
         }
+
+        None
     }
 }

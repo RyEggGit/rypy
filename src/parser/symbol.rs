@@ -36,6 +36,7 @@ pub enum SymbolKind {
     Parameter,
     Module,
     Unknown,
+    Reference,
     // TODO: add mores
 }
 

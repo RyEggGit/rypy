@@ -3,7 +3,9 @@ use std::io::{self, BufRead, Read};
 use log::{error, info, warn};
 use serde_json::{json, Value as Json};
 
-use super::document_sync::DidOpenTextDocumentParams;
+use super::document_sync::{
+    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+};
 use super::language_features::Location;
 use super::lifecycle::{InitializeResult, ServerCapabilities, ServerInfo};
 
@@ -55,13 +57,23 @@ impl LspHandler {
                 let result = self.handle_open_document(params)?;
                 Ok(Some(json!(result)))
             }
-            "textDocument/didChange" => Ok(None),
-            "textDocument/didClose" => Ok(None),
             "textDocument/definition" => {
                 let params: GotoDefinitionParams = serde_json::from_value(params)
                     .map_err(|e| format!("Failed to deserialize params: {}", e))?;
                 let result = self.handle_go_to_definition(params)?;
                 Ok(Some(json!(result)))
+            }
+            "textDocument/didChange" => {
+                let params: DidChangeTextDocumentParams = serde_json::from_value(params)
+                    .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+                self.handle_save_document(params)?;
+                Ok(None)
+            }
+            "textDocument/didClose" => {
+                let params: DidCloseTextDocumentParams = serde_json::from_value(params)
+                    .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+                self.handle_close_document(params)?;
+                Ok(None)
             }
             _ => Err(format!("Unknown method: {}", method)),
         }
@@ -81,6 +93,23 @@ impl LspHandler {
                 version: Some("0.0.0".to_string()),
             }),
         }
+    }
+    /// Handles the `textDocument/didSave` notification.
+    pub fn handle_save_document(
+        &mut self,
+        params: DidChangeTextDocumentParams,
+    ) -> Result<(), String> {
+        self.state.update_document(params);
+        Ok(())
+    }
+
+    /// Handles the `textDocument/didClose` notification.
+    pub fn handle_close_document(
+        &mut self,
+        params: DidCloseTextDocumentParams,
+    ) -> Result<(), String> {
+        self.state.close_document(params);
+        Ok(())
     }
 
     /// Handles the `textDocument/didOpen` notification.
