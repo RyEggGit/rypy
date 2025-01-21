@@ -184,6 +184,13 @@ impl<'a> SymbolCollector<'a> {
                 "module" => {
                     path.push("module".to_string());
                 }
+                "function_definition" => {
+                    if let Some(name_node) = parent.child_by_field_name("name") {
+                        if let Ok(name) = name_node.utf8_text(self.source) {
+                            path.push(name.to_string());
+                        }
+                    }
+                }
                 _ => {}
             }
             current = parent.parent();
@@ -247,7 +254,7 @@ mod tests {
                 start: (1, 4 + ident_length),
                 end: (1, 7 + ident_length),
             },
-            scope_path: vec!["module".to_string()],
+            scope_path: vec!["module".to_string(), "foo".to_string()],
         }];
 
         assert_eq!(symbols, expected_symbols);
@@ -276,7 +283,7 @@ mod tests {
                     start: (1, 4 + ident_length),
                     end: (1, 7 + ident_length),
                 },
-                scope_path: vec!["module".to_string()],
+                scope_path: vec!["module".to_string(), "foo".to_string()],
             },
             Symbol {
                 name: "a".to_string(),

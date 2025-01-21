@@ -12,8 +12,6 @@ pub fn get_declaration_query() -> Result<tree_sitter::Query, tree_sitter::QueryE
           (identifier) @variable.def)
         (import_statement
           (dotted_name (identifier) @module.def))
-
-
     "#,
     )
 }
