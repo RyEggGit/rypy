@@ -176,27 +176,28 @@ impl<'a> SymbolCollector<'a> {
     }
 
     fn get_scope_path(&self, node: tree_sitter::Node) -> Vec<String> {
-        let mut path = Vec::new();
+        let mut path = vec!["module".to_string()];
         let mut current = node.parent();
 
+        // For declarations of functions, we don't include the function itself in its scope
+        if current.is_none() || current.as_ref().unwrap().kind() == "function_definition" {
+            return path;
+        }
+
+
+        // Walk up the tree collecting function names
         while let Some(parent) = current {
-            match parent.kind() {
-                "module" => {
-                    path.push("module".to_string());
-                }
-                "function_definition" => {
-                    if let Some(name_node) = parent.child_by_field_name("name") {
-                        if let Ok(name) = name_node.utf8_text(self.source) {
-                            path.push(name.to_string());
-                        }
+            if parent.kind() == "function_definition" {
+                if let Some(name_node) = parent.child_by_field_name("name") {
+                    if let Ok(name) = name_node.utf8_text(self.source) {
+                        path.push(name.to_string());
                     }
                 }
-                _ => {}
             }
             current = parent.parent();
         }
 
-        path.reverse();
+        // Reverse to get the order from outermost to innermost
         path
     }
 }
@@ -238,7 +239,7 @@ mod tests {
         let source_code = r#"
         def foo():
             pass
-        "#;
+        "#; 
 
         let mut parser = TreeSitterParser::new().unwrap();
         let (symbols, references) = parser.parse(source_code).unwrap();
@@ -254,7 +255,7 @@ mod tests {
                 start: (1, 4 + ident_length),
                 end: (1, 7 + ident_length),
             },
-            scope_path: vec!["module".to_string(), "foo".to_string()],
+            scope_path: vec!["module".to_string()],
         }];
 
         assert_eq!(symbols, expected_symbols);
@@ -283,7 +284,7 @@ mod tests {
                     start: (1, 4 + ident_length),
                     end: (1, 7 + ident_length),
                 },
-                scope_path: vec!["module".to_string(), "foo".to_string()],
+                scope_path: vec!["module".to_string()],
             },
             Symbol {
                 name: "a".to_string(),
