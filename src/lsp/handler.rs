@@ -63,37 +63,47 @@ impl LspHandler {
                 let result = self.handle_go_to_definition(params)?;
                 Ok(Some(json!(result)))
             }
+            "textDocument/didSave" => {
+                let params: DidChangeTextDocumentParams = serde_json::from_value(params)
+                    .map_err(|e| format!("Failed to deserialize params: {}", e))?;
+                let result = self.handle_save_document(params)?;
+                Ok(Some(json!(result)))
+            }
             "textDocument/didChange" => {
                 let params: DidChangeTextDocumentParams = serde_json::from_value(params)
                     .map_err(|e| format!("Failed to deserialize params: {}", e))?;
-                self.handle_save_document(params)?;
-                Ok(None)
+                let result = self.handle_save_document(params)?;
+                Ok(Some(json!(result)))
             }
             "textDocument/didClose" => {
                 let params: DidCloseTextDocumentParams = serde_json::from_value(params)
                     .map_err(|e| format!("Failed to deserialize params: {}", e))?;
-                self.handle_close_document(params)?;
-                Ok(None)
+                let result = self.handle_close_document(params)?;
+                Ok(Some(json!(result)))
             }
             _ => Err(format!("Unknown method: {}", method)),
         }
     }
 
     /// Handles the `initialize` request.
-    pub fn handle_initialize(&mut self) -> InitializeResult {
-        // Return the server capabilities and info
-        InitializeResult {
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(1),
-                hover_provider: Some(false),
-                definition_provider: Some(true),
-            },
-            server_info: Some(ServerInfo {
-                name: "rypy 🐍".to_string(),
-                version: Some("0.0.0".to_string()),
-            }),
-        }
+pub fn handle_initialize(&mut self) -> InitializeResult {
+    // Load server name and version from Cargo.toml
+    let server_name = env!("CARGO_PKG_NAME").to_string();
+    let server_version = env!("CARGO_PKG_VERSION").to_string();
+
+    // Return the server capabilities and info
+    InitializeResult {
+        capabilities: ServerCapabilities {
+            text_document_sync: Some(1),
+            hover_provider: Some(false),
+            definition_provider: Some(true),
+        },
+        server_info: Some(ServerInfo {
+            name: server_name,
+            version: Some(server_version),
+        }),
     }
+}
     /// Handles the `textDocument/didSave` notification.
     pub fn handle_save_document(
         &mut self,

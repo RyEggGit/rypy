@@ -175,6 +175,8 @@ impl<'a> SymbolCollector<'a> {
         }
     }
 
+    /// Given a node, walk up the tree to find the scope path,
+    /// which is a list of function names (TODO: more to come) that the node is nested in.
     fn get_scope_path(&self, node: tree_sitter::Node) -> Vec<String> {
         let mut path = vec!["module".to_string()];
         let mut current = node.parent();
@@ -197,7 +199,6 @@ impl<'a> SymbolCollector<'a> {
             current = parent.parent();
         }
 
-        // Reverse to get the order from outermost to innermost
         path
     }
 }
