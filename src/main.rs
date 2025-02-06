@@ -1,4 +1,5 @@
 use log::{debug, error};
+use simplelog::{CombinedLogger, ConfigBuilder, WriteLogger, LevelFilter};
 use std::fs::File;
 use std::io::Write;
 
@@ -10,12 +11,18 @@ mod storage;
 
 fn main() {
     // Initialize the logger to save to file
-    simplelog::CombinedLogger::init(vec![simplelog::WriteLogger::new(
-        simplelog::LevelFilter::Debug,
-        simplelog::Config::default(),
+    let mut config = ConfigBuilder::new();
+    config.set_target_level(LevelFilter::Error); // Prevents verbose target logs
+    config.add_filter_ignore_str("salsa"); // Ignore salsa logs
+
+    CombinedLogger::init(vec![WriteLogger::new(
+        LevelFilter::Debug,
+        config.build(),
         File::create("lsp.log").unwrap(),
     )])
     .unwrap();
+
+    
 
 
     // Create a new LSP handler
