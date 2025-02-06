@@ -11,4 +11,5 @@ Learning LSP's by implementing a small subset of features for python.
 - [ ] Add support for bultins
 
 ### Goto Definition Demo
-<video controls src="misc/20250120-1805-09.3046809.mp4" title="Title"></video>
+https://github.com/user-attachments/assets/4676a0bb-f63d-4d77-8e75-2f557ab5d003
+
